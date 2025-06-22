@@ -1,5 +1,4 @@
 import time
-import difflib
 import random
 import curses
 import json

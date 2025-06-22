@@ -3,6 +3,18 @@
 Typing Test is a Python script for testing your typing speed.
 
 ## Installation
+
+### Windows
+
+```bash
+git clone https://github.com/Sakura-sx/typing-test.git
+cd typing-test
+pip install -r requirements.txt
+python3 main.py
+```
+
+### Linux
+
 ```bash
 git clone https://github.com/Sakura-sx/typing-test.git
 cd typing-test
