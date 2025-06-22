@@ -170,7 +170,7 @@ def typing_test(stdscr):
             if letter_accuracy[letter] > 0:
                 word_weight[word] = word_weight[word] + letter_weight[letter]
             else:
-                word_weight[word] = word_weight[word] + 2
+                word_weight[word] = word_weight[word] + letter_weight[letter] * 2
         word_weight[word] = word_weight[word] / len(word)
     
     words_to_type = ""
@@ -302,11 +302,19 @@ def typing_test(stdscr):
     end_time = time.time()
     time_taken = end_time - start_time
     
-    accuracy = difflib.SequenceMatcher(None, words_to_type, user_input).ratio()
-    wpm = (len(words_to_type.split()) / time_taken) * 60 if time_taken > 0 else 0
-    
+    accuracy = 0.0
+    letter_count = 0
+    for letter in letter_accuracy:
+        if letter_accuracy[letter] > 0:
+            accuracy += letter_accuracy[letter]
+            letter_count += 1
+    accuracy = accuracy / letter_count
+    raw_wpm = (len(words_to_type.split()) / time_taken) * 60 if time_taken > 0 else 0
+    wpm = raw_wpm * accuracy
+
     test_results = {
         "timestamp": datetime.now().isoformat(),
+        "raw_wpm": round(raw_wpm, 2),
         "wpm": round(wpm, 2),
         "accuracy": round(accuracy * 100, 2),
         "time_taken": round(time_taken, 2),
