@@ -154,6 +154,12 @@ def typing_test(stdscr):
         possible_words = [word.strip() for word in f.readlines()]
     
     calculate_letter_stats()
+
+    for i in range(32, 127):
+        char = chr(i)
+        n_letter_shown[char] = 0
+        n_letter_correct[char] = 0
+        n_letter_accuracy[char] = 0.0
     
     for letter in letter_accuracy:
         inverse_letter_accuracy[letter] = 1 / letter_accuracy[letter] if letter_accuracy[letter] > 0 else 1.0
@@ -206,7 +212,7 @@ def typing_test(stdscr):
     safe_addstr(2, 0, "Type the text below:")
     
     start_row = 4
-    safe_addstr(start_row, 0, words_to_type, curses.color_pair(1))
+    safe_addstr(start_row, 0, words_to_type, curses.color_pair(4))
     
     safe_addstr(6, 0, "Start typing")
     stdscr.refresh()
@@ -222,7 +228,7 @@ def typing_test(stdscr):
         except KeyboardInterrupt:
             break
         
-        if key == 27:  # ESC to quit
+        if key == 27 or key == 3:  # ESC or Ctrl+C to quit
             break
         elif key == curses.KEY_BACKSPACE or key == 8 or key == 127:
             if user_input and len(user_input) > 0:
@@ -257,7 +263,8 @@ def typing_test(stdscr):
                 
                 remaining = words_to_type[len(user_input):]
                 if len(user_input) < max_x - 1:
-                    safe_addstr(start_row, len(user_input), remaining, curses.color_pair(1))  # Grey
+                    safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
+                    safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(4) | curses.A_UNDERLINE | curses.A_BOLD)  # Grey
                 
         elif 32 <= key <= 126:  # Printable characters
             char = chr(key)
@@ -306,7 +313,8 @@ def typing_test(stdscr):
             
             remaining = words_to_type[len(user_input):]
             if len(user_input) < max_x - 1:
-                safe_addstr(start_row, len(user_input), remaining, curses.color_pair(1))  # Grey
+                safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
+                safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(4) | curses.A_UNDERLINE | curses.A_BOLD)  # Grey
             
         try:
             stdscr.refresh()
@@ -332,7 +340,7 @@ def typing_test(stdscr):
             letter_count += 1
     new_accuracy = new_accuracy / letter_count
 
-    raw_wpm = (len(words_to_type.split()) / time_taken) * 60 if time_taken > 0 else 0
+    raw_wpm = (len(words_to_type) / time_taken) * 10 if time_taken > 0 else 0
     wpm = raw_wpm * new_accuracy
 
     test_results = {
@@ -345,7 +353,7 @@ def typing_test(stdscr):
         "words_typed": len(words_to_type.split()),
         "characters_typed": len(user_input)
     }
-    if test_results["accuracy"] > 0.3:
+    if new_accuracy > 0.5:
         save_user_data(test_results)
         safe_addstr(7, 0, "Test results saved", curses.color_pair(2))
     else:
@@ -367,7 +375,7 @@ def typing_test(stdscr):
     try:
         stdscr.refresh()
         key = stdscr.getch()
-        if key == 27:
+        if key == 27 or key == 3:
             return
         else:
             typing_test(stdscr)
@@ -387,7 +395,14 @@ def main():
             curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
             curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)   # Correct
             curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)     # Incorrect
-        
+
+            if curses.can_change_color():
+                GREY_INDEX = 8
+                curses.init_color(GREY_INDEX, 500, 500, 500)  # 50% red, green, blue
+                curses.init_pair(4, GREY_INDEX, curses.COLOR_BLACK)  # Grey text on black
+            else:
+                curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLACK)
+                
         typing_test(stdscr)
     except Exception as e:
         try:
