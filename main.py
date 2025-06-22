@@ -6,20 +6,27 @@ import os
 from datetime import datetime
 
 letter_shown = {}
+n_letter_shown = {}
 letter_correct = {}
+n_letter_correct = {}
 letter_accuracy = {}
+n_letter_accuracy = {}
 inverse_letter_accuracy = {}
 letter_weight = {}
 letter_time_total = {}
 letter_time_count = {}
 letter_wpm = {}
 last_keystroke_time = 0.0
+forgive_errors = False
 
 for i in range(32, 127):
     char = chr(i)
     letter_shown[char] = 0
+    n_letter_shown[char] = 0
     letter_correct[char] = 0
+    n_letter_correct[char] = 0
     letter_accuracy[char] = 0.0
+    n_letter_accuracy[char] = 0.0
     inverse_letter_accuracy[char] = 1.0
     letter_weight[char] = 0.0
     letter_time_total[char] = 0.0
@@ -143,11 +150,8 @@ def typing_test(stdscr):
         stdscr.getch()
         return
     
-    try:
-        with open("words.txt", "r") as f:
-            possible_words = [word.strip() for word in f.readlines()]
-    except FileNotFoundError:
-        possible_words = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "hello", "world"]
+    with open("words_i_like.txt", "r") as f:
+        possible_words = [word.strip() for word in f.readlines()]
     
     calculate_letter_stats()
     
@@ -204,7 +208,7 @@ def typing_test(stdscr):
     start_row = 4
     safe_addstr(start_row, 0, words_to_type, curses.color_pair(1))
     
-    safe_addstr(6, 0, "Start typing:")
+    safe_addstr(6, 0, "Start typing")
     stdscr.refresh()
     
     user_input = ""
@@ -224,9 +228,16 @@ def typing_test(stdscr):
             if user_input and len(user_input) > 0:
                 last_char_pos = len(user_input) - 1
                 if last_char_pos < len(words_to_type):
-                    letter_shown[words_to_type[last_char_pos]] -= 1
+                    if forgive_errors:
+                        letter_shown[words_to_type[last_char_pos]] -= 1
+                        n_letter_shown[words_to_type[last_char_pos]] -= 1
+
                     if user_input[last_char_pos] == words_to_type[last_char_pos]:
+                        if not forgive_errors:
+                            letter_shown[words_to_type[last_char_pos]] -= 1
+                            n_letter_shown[words_to_type[last_char_pos]] -= 1
                         letter_correct[words_to_type[last_char_pos]] -= 1
+                        n_letter_correct[words_to_type[last_char_pos]] -= 1
                 
                 user_input = user_input[:-1]
                 current_pos = len(user_input)
@@ -263,15 +274,19 @@ def typing_test(stdscr):
             if position < len(words_to_type):
                 expected_char = words_to_type[position]
                 letter_shown[expected_char] += 1
+                n_letter_shown[expected_char] += 1
                 
                 if char == expected_char:
                     letter_time_total[expected_char] += keystroke_time
                     letter_time_count[expected_char] += 1
                     
                     letter_correct[expected_char] += 1
+                    n_letter_correct[expected_char] += 1
                     letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+                    n_letter_accuracy[expected_char] = n_letter_correct[expected_char] / n_letter_shown[expected_char]
                 else:
                     letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+                    n_letter_accuracy[expected_char] = n_letter_correct[expected_char] / n_letter_shown[expected_char]
             
             last_keystroke_time = current_time
             current_pos = len(user_input)
@@ -300,40 +315,54 @@ def typing_test(stdscr):
     
     end_time = time.time()
     time_taken = end_time - start_time
-    
     accuracy = 0.0
     letter_count = 0
+
     for letter in letter_accuracy:
         if letter_accuracy[letter] > 0:
             accuracy += letter_accuracy[letter]
             letter_count += 1
     accuracy = accuracy / letter_count
+
+    new_accuracy = 0.0
+    letter_count = 0
+    for letter in n_letter_accuracy:
+        if n_letter_accuracy[letter] > 0:
+            new_accuracy += n_letter_accuracy[letter]
+            letter_count += 1
+    new_accuracy = new_accuracy / letter_count
+
     raw_wpm = (len(words_to_type.split()) / time_taken) * 60 if time_taken > 0 else 0
-    wpm = raw_wpm * accuracy
+    wpm = raw_wpm * new_accuracy
 
     test_results = {
         "timestamp": datetime.now().isoformat(),
         "raw_wpm": round(raw_wpm, 2),
         "wpm": round(wpm, 2),
-        "accuracy": round(accuracy * 100, 2),
+        "accuracy": round(new_accuracy * 100, 2),
         "time_taken": round(time_taken, 2),
         "text_length": len(words_to_type),
         "words_typed": len(words_to_type.split()),
         "characters_typed": len(user_input)
     }
+    if test_results["accuracy"] > 0.3:
+        save_user_data(test_results)
+        safe_addstr(7, 0, "Test results saved", curses.color_pair(2))
+    else:
+        safe_addstr(7, 0, "The test results are not saved because the accuracy is too low", curses.color_pair(3))
     
-    save_user_data(test_results)
     safe_addstr(8, 0, f"Time taken: {time_taken:.2f} seconds")
     safe_addstr(9, 0, f"Words per minute: {wpm:.2f}")
-    safe_addstr(10, 0, f"Accuracy: {accuracy * 100:.2f}%")
+    safe_addstr(10, 0, f"Accuracy: {new_accuracy * 100:.2f}%")
+    safe_addstr(11, 0, f"Avg. Accuracy: {accuracy * 100:.2f}%")
     letter_stats = [f"{letter}: {letter_accuracy[letter] * 100:.2f}%" for letter in letter_accuracy if letter_accuracy[letter] > 0]
-    safe_addstr(11, 0, f"Letter accuracy: {', '.join(letter_stats)}")
-    safe_addstr(12, 0, "Press esc to exit... Press any other key to continue")
+    safe_addstr(12, 0, f"Letter accuracy: {', '.join(letter_stats)}")
+    safe_addstr(13, 0, "Press esc to exit... Press any other key to continue")
     
     calculate_letter_stats()
     letter_wpm_stats = [f"{letter}: {letter_wpm[letter]:.1f} WPM" for letter in letter_wpm if letter_time_count[letter] > 0]
     if letter_wpm_stats:
-        safe_addstr(13, 0, f"Letter WPM: {', '.join(letter_wpm_stats[:10])}")
+        safe_addstr(14, 0, f"Letter WPM: {', '.join(letter_wpm_stats[:10])}")
     
     try:
         stdscr.refresh()
