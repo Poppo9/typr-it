@@ -4,6 +4,7 @@ import curses
 import json
 import os
 from datetime import datetime
+import sys
 
 letter_shown = {}
 n_letter_shown = {}
@@ -17,7 +18,6 @@ letter_time_total = {}
 letter_time_count = {}
 letter_wpm = {}
 last_keystroke_time = 0.0
-forgive_errors = False
 
 for i in range(32, 127):
     char = chr(i)
@@ -166,10 +166,10 @@ def typing_test(stdscr):
     
     for letter in letter_accuracy:
         if letter in letter_frequency:
-            wpm_weight = 1.0 / (letter_wpm[letter] + 0.1)
+            wmp_weight = 1.0 / (letter_wpm[letter] + 0.1)
             letter_weight[letter] = (inverse_letter_accuracy[letter] * 
                                    letter_frequency[letter] * 
-                                   wpm_weight)
+                                   wmp_weight)
         else:
             letter_weight[letter] = 1.0
 
@@ -184,13 +184,15 @@ def typing_test(stdscr):
     
     words_to_type = ""
     word_count = 0
-    for _ in range(10):
+    target_words = words_limit if test_type == "words" else 10
+    
+    for _ in range(target_words):
         word = random.choices(possible_words, weights=word_weight.values(), k=1)[0]
         test_text = words_to_type + (" " if words_to_type else "") + word
-        if len(test_text) < max_x - 5:
+        if len(test_text) < max_x * 2:
             words_to_type = test_text
             word_count += 1
-            if word_count >= 10:
+            if word_count >= target_words:
                 break
         else:
             break
@@ -208,7 +210,13 @@ def typing_test(stdscr):
         except curses.error:
             pass
     
-    safe_addstr(0, 0, "Welcome to the typing test!")
+    safe_addstr(0, 0, "Welcome to typr!")
+    if test_type == "time":
+        safe_addstr(1, 0, f"Time limit: {time_limit} seconds - Press any key to start")
+    elif test_type == "forever":
+        safe_addstr(1, 0, "Forever mode - Press ESC to quit, any key to start")
+    else:
+        safe_addstr(1, 0, f"Words to type: {words_limit}")
     safe_addstr(2, 0, "Type the text below:")
     
     start_row = 4
@@ -217,18 +225,70 @@ def typing_test(stdscr):
     stdscr.refresh()
     
     user_input = ""
-    start_time = time.time()
-    last_keystroke_time = start_time
+    start_time = None
+    last_keystroke_time = 0.0
     current_pos = 0
+    test_finished = False
+    typing_started = False
     
-    while current_pos < len(words_to_type):
+    while not test_finished:
+        current_time = time.time()
+        
+        if test_type == "time" or test_type == "forever":
+            if typing_started and start_time:
+                elapsed_time = current_time - start_time
+                if test_type == "time":
+                    remaining_time = max(0, time_limit - elapsed_time)
+                    if elapsed_time > 0:
+                        current_wpm = (len(user_input) / elapsed_time) * 12
+                    else:
+                        current_wpm = 0
+                    safe_addstr(1, 0, f"Time: {remaining_time:.1f}s | WPM: {current_wpm:.1f}")
+                    try:
+                        stdscr.clrtoeol()
+                    except curses.error:
+                        pass
+                else:
+                    if elapsed_time > 0:
+                        current_wpm = (len(user_input) / elapsed_time) * 12
+                    else:
+                        current_wpm = 0
+                    safe_addstr(1, 0, f"Time: {elapsed_time:.1f}s | WPM: {current_wpm:.1f} | ESC to quit")
+                    try:
+                        stdscr.clrtoeol()
+                    except curses.error:
+                        pass
+        
+        if test_type == "time" and typing_started and start_time and (current_time - start_time) >= time_limit:
+            test_finished = True
+            break
+        
+        if (test_type == "time" or test_type == "forever") and current_pos >= len(words_to_type) - 30:
+            additional_words = ""
+            for _ in range(8):
+                word = random.choices(possible_words, weights=word_weight.values(), k=1)[0]
+                test_text = additional_words + (" " if additional_words else "") + word
+                additional_words = test_text
+                if len(additional_words.split()) >= 8:
+                    break
+            if additional_words:
+                words_to_type += " " + additional_words
+        
+        if test_type == "words" and current_pos >= len(words_to_type):
+            test_finished = True
+            break
+        
         try:
             key = stdscr.getch()
         except KeyboardInterrupt:
             exit()
         
         if key == 27 or key == 3:  # ESC or Ctrl+C to quit
-            exit()
+            if test_type == "forever":
+                test_finished = True
+                break
+            else:
+                exit()
         elif key == curses.KEY_BACKSPACE or key == 8 or key == 127:
             if user_input and len(user_input) > 0:
                 last_char_pos = len(user_input) - 1
@@ -253,21 +313,34 @@ def typing_test(stdscr):
                 except curses.error:
                     pass
                 
-                for i, char in enumerate(user_input):
-                    if i < max_x - 1:
-                        if char == words_to_type[i]:
+                display_start = max(0, len(user_input) - max_x // 2) if len(user_input) > max_x // 2 else 0
+                display_input = user_input[display_start:]
+                display_target = words_to_type[display_start:display_start + max_x - 1]
+                
+                for i, char in enumerate(display_input):
+                    if i < len(display_target) and i < max_x - 1:
+                        if char == display_target[i]:
                             safe_addstr(start_row, i, char, curses.color_pair(2))  # Correct - green
                         else:
                             safe_addstr(start_row, i, char, curses.color_pair(3))  # Incorrect - red
                 
-                remaining = words_to_type[len(user_input):]
-                if len(user_input) < max_x - 1:
-                    safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
-                    safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
+                remaining = display_target[len(display_input):]
+                if len(display_input) < max_x - 1:
+                    safe_addstr(start_row, len(display_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
+                    safe_addstr(start_row, len(display_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
                 
         elif 32 <= key <= 126:  # Printable characters
             char = chr(key)
+            
+            if not typing_started:
+                typing_started = True
+                start_time = time.time()
+                last_keystroke_time = start_time
+            
             current_time = time.time()
+            
+            if forgive_errors and current_pos < len(words_to_type) and char != words_to_type[current_pos]:
+                continue
             
             if last_keystroke_time > 0:
                 keystroke_time = current_time - last_keystroke_time
@@ -303,25 +376,29 @@ def typing_test(stdscr):
             except curses.error:
                 pass
             
-            for i, typed_char in enumerate(user_input):
-                if i < len(words_to_type) and i < max_x - 1:
-                    if typed_char == words_to_type[i]:
+            display_start = max(0, len(user_input) - max_x // 2) if len(user_input) > max_x // 2 else 0
+            display_input = user_input[display_start:]
+            display_target = words_to_type[display_start:display_start + max_x - 1]
+            
+            for i, typed_char in enumerate(display_input):
+                if i < len(display_target) and i < max_x - 1:
+                    if typed_char == display_target[i]:
                         safe_addstr(start_row, i, typed_char, curses.color_pair(2))  # Correct - green
                     else:
                         safe_addstr(start_row, i, typed_char, curses.color_pair(3))  # Incorrect - red
             
-            remaining = words_to_type[len(user_input):]
-            if len(user_input) < max_x - 1:
-                safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
-                safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
-            
+            remaining = display_target[len(display_input):]
+            if len(display_input) < max_x - 1:
+                safe_addstr(start_row, len(display_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
+                safe_addstr(start_row, len(display_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
+        
         try:
             stdscr.refresh()
         except curses.error:
             pass
     
     end_time = time.time()
-    time_taken = end_time - start_time
+    time_taken = end_time - start_time if start_time else 0
     accuracy = 0.0
     letter_count = 0
 
@@ -366,17 +443,21 @@ def typing_test(stdscr):
     # 11 (test results saved)
     safe_addstr(12, 0, f"Time taken: {time_taken:.2f} seconds")
     safe_addstr(13, 0, f"Avg. Accuracy: {accuracy * 100:.2f}%")
-    safe_addstr(15, 0, "Press esc to exit... Press any other key to continue")
+    safe_addstr(15, 0, "Press esc to exit... Press enter to continue")
     
     calculate_letter_stats()
     
     try:
         stdscr.refresh()
         key = stdscr.getch()
-        if key == 27 or key == 3:
-            exit()
-        else:
-            typing_test(stdscr)
+        while True:
+            if key == 27 or key == 3:
+                exit()
+            elif key == 10:
+                break
+            time.sleep(0.01)
+        typing_test(stdscr)
+
     except curses.error:
         pass
 
@@ -401,7 +482,6 @@ def main():
                 curses.init_pair(4, GREY_INDEX, curses.COLOR_BLACK)  # Grey text on black
             else:
                 curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLACK)
-                
         typing_test(stdscr)
     except Exception as e:
         try:
@@ -418,4 +498,18 @@ def main():
             pass
 
 if __name__ == "__main__":
+    global forgive_errors, test_type, time_limit, words_limit
+    forgive_errors = False
+    test_type = "words" # words or time or forever
+    time_limit = 60 # time limit in seconds
+    words_limit = 10 # words limit
+    if "--forgive-errors" in sys.argv:
+        forgive_errors = True
+    if "--time" in sys.argv:
+        test_type = "time"
+        time_limit = int(sys.argv[sys.argv.index("--time") + 1])
+    if "--words" in sys.argv and test_type == "words":
+        words_limit = int(sys.argv[sys.argv.index("--words") + 1])
+    if "--forever" in sys.argv:
+        test_type = "forever"
     main()
