@@ -214,7 +214,6 @@ def typing_test(stdscr):
     start_row = 4
     safe_addstr(start_row, 0, words_to_type, curses.color_pair(4))
     
-    safe_addstr(6, 0, "Start typing")
     stdscr.refresh()
     
     user_input = ""
@@ -355,28 +354,27 @@ def typing_test(stdscr):
     }
     if new_accuracy > 0.5:
         save_user_data(test_results)
-        safe_addstr(7, 0, "Test results saved", curses.color_pair(2))
+        safe_addstr(11, 0, "Test results saved", curses.color_pair(2))
     else:
-        safe_addstr(7, 0, "The test results are not saved because the accuracy is too low", curses.color_pair(3))
-    
-    safe_addstr(8, 0, f"Time taken: {time_taken:.2f} seconds")
-    safe_addstr(9, 0, f"Words per minute: {wpm:.2f}")
-    safe_addstr(10, 0, f"Accuracy: {new_accuracy * 100:.2f}%")
-    safe_addstr(11, 0, f"Avg. Accuracy: {accuracy * 100:.2f}%")
-    letter_stats = [f"{letter}: {letter_accuracy[letter] * 100:.2f}%" for letter in letter_accuracy if letter_accuracy[letter] > 0]
-    safe_addstr(12, 0, f"Letter accuracy: {', '.join(letter_stats)}")
-    safe_addstr(13, 0, "Press esc to exit... Press any other key to continue")
+        safe_addstr(11, 0, "The test results are not saved because the accuracy is too low", curses.color_pair(3))
+
+
+    safe_addstr(7, 0, f"WPM: {wpm:.2f}")
+    safe_addstr(8, 0, f"Accuracy: {new_accuracy * 100:.2f}%")
+    # 9
+    # 10
+    # 11 (test results saved)
+    safe_addstr(12, 0, f"Time taken: {time_taken:.2f} seconds")
+    safe_addstr(13, 0, f"Avg. Accuracy: {accuracy * 100:.2f}%")
+    safe_addstr(15, 0, "Press esc to exit... Press any other key to continue")
     
     calculate_letter_stats()
-    letter_wpm_stats = [f"{letter}: {letter_wpm[letter]:.1f} WPM" for letter in letter_wpm if letter_time_count[letter] > 0]
-    if letter_wpm_stats:
-        safe_addstr(14, 0, f"Letter WPM: {', '.join(letter_wpm_stats[:10])}")
     
     try:
         stdscr.refresh()
         key = stdscr.getch()
         if key == 27 or key == 3:
-            return
+            exit()
         else:
             typing_test(stdscr)
     except curses.error:
