@@ -2,13 +2,19 @@ import time
 import difflib
 import random
 import curses
+import json
+import os
+from datetime import datetime
 
 letter_shown = {}
 letter_correct = {}
 letter_accuracy = {}
 inverse_letter_accuracy = {}
 letter_weight = {}
-letter_time = {}
+letter_time_total = {}
+letter_time_count = {}
+letter_wpm = {}
+last_keystroke_time = 0.0
 
 for i in range(32, 127):
     char = chr(i)
@@ -17,7 +23,9 @@ for i in range(32, 127):
     letter_accuracy[char] = 0.0
     inverse_letter_accuracy[char] = 1.0
     letter_weight[char] = 0.0
-    letter_time[char] = 0.0
+    letter_time_total[char] = 0.0
+    letter_time_count[char] = 0
+    letter_wpm[char] = 0.0
 
 letter_frequency = {
     "e": 	12.02,
@@ -48,12 +56,84 @@ letter_frequency = {
     "z": 	0.07,
 }
 
-average_time = 0.0
+def load_user_data():
+    global letter_shown, letter_correct, letter_accuracy, letter_time_total, letter_time_count, letter_wpm
+    
+    try:
+        if os.path.exists("userdata.json"):
+            with open("userdata.json", "r") as f:
+                data = json.load(f)
+                
+            if "letter_shown" in data:
+                letter_shown.update(data["letter_shown"])
+            if "letter_correct" in data:
+                letter_correct.update(data["letter_correct"])
+            if "letter_accuracy" in data:
+                letter_accuracy.update(data["letter_accuracy"])
+            if "letter_time_total" in data:
+                letter_time_total.update(data["letter_time_total"])
+            if "letter_time_count" in data:
+                letter_time_count.update(data["letter_time_count"])
+            if "letter_wpm" in data:
+                letter_wpm.update(data["letter_wpm"])
+                
+            return data.get("test_history", [])
+    except (json.JSONDecodeError, IOError) as e:
+        pass
+    
+    return []
+
+def save_user_data(test_results):
+    try:
+        test_history = []
+        if os.path.exists("userdata.json"):
+            try:
+                with open("userdata.json", "r") as f:
+                    existing_data = json.load(f)
+                    test_history = existing_data.get("test_history", [])
+            except:
+                pass
+        
+        test_history.append(test_results)
+        
+        if len(test_history) > 50:
+            test_history = test_history[-50:]
+        
+        data = {
+            "letter_shown": letter_shown,
+            "letter_correct": letter_correct,
+            "letter_accuracy": letter_accuracy,
+            "letter_time_total": letter_time_total,
+            "letter_time_count": letter_time_count,
+            "letter_wpm": letter_wpm,
+            "test_history": test_history,
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        with open("userdata.json", "w") as f:
+            json.dump(data, f, indent=2)
+            
+    except IOError as e:
+        pass
+
+def calculate_letter_stats():
+    """Calculate average timing and WPM for each letter"""
+    global letter_wpm
+    
+    for letter in letter_time_total:
+        if letter_time_count[letter] > 0:
+            avg_time = letter_time_total[letter] / letter_time_count[letter]
+            # Convert to WPM: (characters per minute) / 5 (avg word length)
+            if avg_time > 0:
+                letter_wpm[letter] = (12 / avg_time)  # WPM
+            else:
+                letter_wpm[letter] = 0.0
 
 def typing_test(stdscr):
+    global last_keystroke_time
+    
     curses.curs_set(0)
     stdscr.clear()
-    
     max_y, max_x = stdscr.getmaxyx()
     
     if max_y < 15 or max_x < 50:
@@ -64,30 +144,25 @@ def typing_test(stdscr):
         stdscr.getch()
         return
     
-    with open("words.txt", "r") as f:
-        possible_words = [word.strip() for word in f.readlines()]
-
-    for letter in letter_accuracy:
-        inverse_letter_accuracy[letter] = 1 / letter_accuracy[letter] if letter_accuracy[letter] > 0 else 1.0
-
-    if letter_time:
-        average_time = sum(letter_time.values()) / len(letter_time)
-    else:
-        average_time = 1.0
+    try:
+        with open("words.txt", "r") as f:
+            possible_words = [word.strip() for word in f.readlines()]
+    except FileNotFoundError:
+        possible_words = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "hello", "world"]
+    
+    calculate_letter_stats()
     
     for letter in letter_accuracy:
-        if letter in letter_time:
-            letter_time[letter] = letter_time[letter] / average_time if average_time > 0 else 1.0
-        else:
-            letter_time[letter] = 1.0
-
+        inverse_letter_accuracy[letter] = 1 / letter_accuracy[letter] if letter_accuracy[letter] > 0 else 1.0
+    
     for letter in letter_accuracy:
-        if letter in letter_time and letter in letter_frequency:
+        if letter in letter_frequency:
+            wpm_weight = 1.0 / (letter_wpm[letter] + 0.1)
             letter_weight[letter] = (inverse_letter_accuracy[letter] * 
                                    letter_frequency[letter] * 
-                                   letter_time[letter] / average_time if average_time > 0 else 1.0)
+                                   wpm_weight)
         else:
-            letter_weight[letter] = letter_weight[letter]
+            letter_weight[letter] = 1.0
 
     word_weight = {word: 1 for word in possible_words}
     for word in possible_words:
@@ -135,6 +210,7 @@ def typing_test(stdscr):
     
     user_input = ""
     start_time = time.time()
+    last_keystroke_time = start_time
     current_pos = 0
     
     while current_pos < len(words_to_type):
@@ -145,8 +221,14 @@ def typing_test(stdscr):
         
         if key == 27:  # ESC to quit
             break
-        elif key == curses.KEY_BACKSPACE or key == 8 or key == 127:  # Backspace
-            if user_input:
+        elif key == curses.KEY_BACKSPACE or key == 8 or key == 127:
+            if user_input and len(user_input) > 0:
+                last_char_pos = len(user_input) - 1
+                if last_char_pos < len(words_to_type):
+                    letter_shown[words_to_type[last_char_pos]] -= 1
+                    if user_input[last_char_pos] == words_to_type[last_char_pos]:
+                        letter_correct[words_to_type[last_char_pos]] -= 1
+                
                 user_input = user_input[:-1]
                 current_pos = len(user_input)
                 
@@ -156,7 +238,6 @@ def typing_test(stdscr):
                 except curses.error:
                     pass
                 
-                # Redraw text
                 for i, char in enumerate(user_input):
                     if i < max_x - 1:
                         if char == words_to_type[i]:
@@ -170,7 +251,31 @@ def typing_test(stdscr):
                 
         elif 32 <= key <= 126:  # Printable characters
             char = chr(key)
+            current_time = time.time()
+            
+            if last_keystroke_time > 0:
+                keystroke_time = current_time - last_keystroke_time
+            else:
+                keystroke_time = 0.0
+            
             user_input += char
+            position = len(user_input) - 1
+            
+            if position < len(words_to_type):
+                expected_char = words_to_type[position]
+                letter_shown[expected_char] += 1
+                
+                if char == expected_char:
+                    letter_time_total[expected_char] += keystroke_time
+                    letter_time_count[expected_char] += 1
+                    
+                    letter_correct[expected_char] += 1
+                    letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+                else:
+                    letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+            
+            last_keystroke_time = current_time
+            current_pos = len(user_input)
             
             try:
                 stdscr.move(start_row, 0)
@@ -178,26 +283,17 @@ def typing_test(stdscr):
             except curses.error:
                 pass
             
-            # Redraw text
             for i, typed_char in enumerate(user_input):
                 if i < len(words_to_type) and i < max_x - 1:
-                    letter_shown[words_to_type[i]] += 1
                     if typed_char == words_to_type[i]:
-                        letter_time[typed_char] = time.time() - start_time
                         safe_addstr(start_row, i, typed_char, curses.color_pair(2))  # Correct - green
-                        letter_correct[typed_char] += 1
-                        letter_accuracy[typed_char] = letter_correct[typed_char] / letter_shown[typed_char]
                     else:
                         safe_addstr(start_row, i, typed_char, curses.color_pair(3))  # Incorrect - red
-                        letter_accuracy[words_to_type[i]] = letter_correct[words_to_type[i]] / letter_shown[words_to_type[i]]
-                        
             
             remaining = words_to_type[len(user_input):]
             if len(user_input) < max_x - 1:
                 safe_addstr(start_row, len(user_input), remaining, curses.color_pair(1))  # Grey
             
-            current_pos = len(user_input)
-        
         try:
             stdscr.refresh()
         except curses.error:
@@ -209,12 +305,28 @@ def typing_test(stdscr):
     accuracy = difflib.SequenceMatcher(None, words_to_type, user_input).ratio()
     wpm = (len(words_to_type.split()) / time_taken) * 60 if time_taken > 0 else 0
     
+    test_results = {
+        "timestamp": datetime.now().isoformat(),
+        "wpm": round(wpm, 2),
+        "accuracy": round(accuracy * 100, 2),
+        "time_taken": round(time_taken, 2),
+        "text_length": len(words_to_type),
+        "words_typed": len(words_to_type.split()),
+        "characters_typed": len(user_input)
+    }
+    
+    save_user_data(test_results)
     safe_addstr(8, 0, f"Time taken: {time_taken:.2f} seconds")
     safe_addstr(9, 0, f"Words per minute: {wpm:.2f}")
     safe_addstr(10, 0, f"Accuracy: {accuracy * 100:.2f}%")
     letter_stats = [f"{letter}: {letter_accuracy[letter] * 100:.2f}%" for letter in letter_accuracy if letter_accuracy[letter] > 0]
     safe_addstr(11, 0, f"Letter accuracy: {', '.join(letter_stats)}")
     safe_addstr(12, 0, "Press esc to exit... Press any other key to continue")
+    
+    calculate_letter_stats()
+    letter_wpm_stats = [f"{letter}: {letter_wpm[letter]:.1f} WPM" for letter in letter_wpm if letter_time_count[letter] > 0]
+    if letter_wpm_stats:
+        safe_addstr(13, 0, f"Letter WPM: {', '.join(letter_wpm_stats[:10])}")
     
     try:
         stdscr.refresh()
@@ -227,6 +339,8 @@ def typing_test(stdscr):
         pass
 
 def main():
+    load_user_data()
+    
     try:
         stdscr = curses.initscr()
         curses.noecho()
@@ -255,9 +369,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
