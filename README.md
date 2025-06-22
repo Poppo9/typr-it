@@ -1,5 +1,7 @@
 # typr
 
+![typr](https://github.com/Sakura-sx/typr/blob/main/image.png?raw=true)
+
 TUI typing test with a word selection algorithm inspired by [keybr](https://keybr.com/)
 
 ## Features
