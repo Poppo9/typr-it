@@ -1,14 +1,22 @@
-# Typing Test
+# typr
 
-Typing Test is a Python script for testing your typing speed.
+TUI typing test with a word selection algorithm inspired by [keybr](https://keybr.com/)
+
+## Features
+ - Word selection algorithm to optimize your typing speed inspired by [keybr](https://keybr.com/) weighted by:
+    - Accuracy with the letter
+    - Frequency of the letter in the English language
+    - Speed at which you type the letter
+- A cool TUI with curses
+- Stores your data in a JSON file
 
 ## Installation
 
 ### Windows
 
 ```bash
-git clone https://github.com/Sakura-sx/typing-test.git
-cd typing-test
+git clone https://github.com/Sakura-sx/typr.git
+cd typr
 pip install -r requirements.txt
 python3 main.py
 ```
@@ -16,8 +24,8 @@ python3 main.py
 ### Linux
 
 ```bash
-git clone https://github.com/Sakura-sx/typing-test.git
-cd typing-test
+git clone https://github.com/Sakura-sx/typr.git
+cd typr
 python3 main.py
 ```
 

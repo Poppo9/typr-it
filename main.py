@@ -225,10 +225,10 @@ def typing_test(stdscr):
         try:
             key = stdscr.getch()
         except KeyboardInterrupt:
-            break
+            exit()
         
         if key == 27 or key == 3:  # ESC or Ctrl+C to quit
-            break
+            exit()
         elif key == curses.KEY_BACKSPACE or key == 8 or key == 127:
             if user_input and len(user_input) > 0:
                 last_char_pos = len(user_input) - 1
@@ -263,7 +263,7 @@ def typing_test(stdscr):
                 remaining = words_to_type[len(user_input):]
                 if len(user_input) < max_x - 1:
                     safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
-                    safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(4) | curses.A_UNDERLINE | curses.A_BOLD)  # Grey
+                    safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
                 
         elif 32 <= key <= 126:  # Printable characters
             char = chr(key)
@@ -313,7 +313,7 @@ def typing_test(stdscr):
             remaining = words_to_type[len(user_input):]
             if len(user_input) < max_x - 1:
                 safe_addstr(start_row, len(user_input) + 1, remaining[1:], curses.color_pair(4))  # Grey
-                safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(4) | curses.A_UNDERLINE | curses.A_BOLD)  # Grey
+                safe_addstr(start_row, len(user_input), remaining[:1], curses.color_pair(5) | curses.A_UNDERLINE | curses.A_BOLD)  # Black on white
             
         try:
             stdscr.refresh()
@@ -393,6 +393,7 @@ def main():
             curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
             curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)   # Correct
             curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)     # Incorrect
+            curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_WHITE)    # Black on white
 
             if curses.can_change_color():
                 GREY_INDEX = 8
