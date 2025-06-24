@@ -13,7 +13,6 @@ TUI typing test with a word selection algorithm inspired by [keybr](https://keyb
 - Stores your data in a JSON file
 
 ## Installation
-
 ### Windows
 
 ```bash
@@ -33,8 +32,29 @@ python3 main.py
 
 ## Usage
 
+### Running it normally
 ```bash
 python3 main.py
+```
+
+### To forgive errors
+```bash
+python3 main.py --forgive-errors
+```
+
+### To set the time limit
+```bash
+python3 main.py --time 60
+```
+
+### To set the words limit
+```bash
+python3 main.py --words 100
+```
+
+### To run it forever
+```bash
+python3 main.py --forever
 ```
 
 ## Roadmap

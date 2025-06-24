@@ -62,6 +62,55 @@ letter_frequency = {
     "z": 	0.07,
 }
 
+settings = {
+    "forgive_errors": False,
+    "default_time_limit": 60,
+    "default_words_limit": 10,
+    "show_wpm_live": True,
+    "auto_save_results": True,
+    "min_accuracy_to_save": 0.5
+}
+
+def load_settings():
+    global settings
+    try:
+        if os.path.exists("settings.json"):
+            with open("settings.json", "r") as f:
+                loaded_settings = json.load(f)
+                settings.update(loaded_settings)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+def save_settings():
+    try:
+        with open("settings.json", "w") as f:
+            json.dump(settings, f, indent=2)
+    except IOError:
+        pass
+
+def reset_all_data():
+    global letter_shown, letter_correct, letter_accuracy
+    global letter_time_total, letter_time_count, letter_wpm
+    
+    try:
+        if os.path.exists("userdata.json"):
+            os.remove("userdata.json")
+        if os.path.exists("word_frequency.json"):
+            os.remove("word_frequency.json")
+        
+        for i in range(32, 127):
+            char = chr(i)
+            letter_shown[char] = 0
+            letter_correct[char] = 0
+            letter_accuracy[char] = 0.0
+            letter_time_total[char] = 0.0
+            letter_time_count[char] = 0
+            letter_wpm[char] = 0.0
+        
+        return True
+    except Exception:
+        return False
+
 def load_user_data():
     global letter_shown, letter_correct, letter_accuracy, letter_time_total, letter_time_count, letter_wpm
     
@@ -219,6 +268,8 @@ def typing_test(stdscr):
         status_text = f"Time limit: {time_limit} seconds - Press any key to start"
     elif test_type == "forever":
         status_text = "Forever mode - Press ESC to quit, any key to start"
+    elif test_type == "settings":
+        status_text = "Settings - Press ESC to exit"
     else:
         status_text = f"Words to type: {words_limit}"
     status_x = center_x - len(status_text) // 2
@@ -295,7 +346,7 @@ def typing_test(stdscr):
         current_time = time.time()
         
         if test_type == "time" or test_type == "forever":
-            if typing_started and start_time:
+            if typing_started and start_time and settings["show_wpm_live"]:
                 elapsed_time = current_time - start_time
                 if test_type == "time":
                     remaining_time = max(0, time_limit - elapsed_time)
@@ -349,12 +400,12 @@ def typing_test(stdscr):
             if user_input and len(user_input) > 0:
                 last_char_pos = len(user_input) - 1
                 if last_char_pos < len(words_to_type):
-                    if forgive_errors:
+                    if settings["forgive_errors"]:
                         letter_shown[words_to_type[last_char_pos]] -= 1
                         n_letter_shown[words_to_type[last_char_pos]] -= 1
 
                     if user_input[last_char_pos] == words_to_type[last_char_pos]:
-                        if not forgive_errors:
+                        if not settings["forgive_errors"]:
                             letter_shown[words_to_type[last_char_pos]] -= 1
                             n_letter_shown[words_to_type[last_char_pos]] -= 1
                         letter_correct[words_to_type[last_char_pos]] -= 1
@@ -374,7 +425,7 @@ def typing_test(stdscr):
             
             current_time = time.time()
             
-            if forgive_errors and current_pos < len(words_to_type) and char != words_to_type[current_pos]:
+            if settings["forgive_errors"] and current_pos < len(words_to_type) and char != words_to_type[current_pos]:
                 continue
             
             if last_keystroke_time > 0:
@@ -466,13 +517,16 @@ def typing_test(stdscr):
     avg_accuracy_x = center_x - len(avg_accuracy_text) // 2
     safe_addstr(center_y - 1, avg_accuracy_x, avg_accuracy_text)
     
-    if new_accuracy > 0.5:
+    if new_accuracy >= settings["min_accuracy_to_save"] and settings["auto_save_results"]:
         save_user_data(test_results)
         saved_text = "Test results saved"
         saved_x = center_x - len(saved_text) // 2
         safe_addstr(center_y + 1, saved_x, saved_text, curses.color_pair(2))
     else:
-        not_saved_text = "Results not saved - accuracy too low"
+        if not settings["auto_save_results"]:
+            not_saved_text = "Auto-save disabled"
+        else:
+            not_saved_text = f"Results not saved - accuracy too low (min: {int(settings['min_accuracy_to_save']*100)}%)"
         not_saved_x = center_x - len(not_saved_text) // 2
         safe_addstr(center_y + 1, not_saved_x, not_saved_text, curses.color_pair(3))
     
@@ -505,6 +559,7 @@ def show_menu(stdscr):
         ("Words Test (10 words)", "words"),
         ("Time Test (60s)", "time"),
         ("Forever Mode (no time limit)", "forever"),
+        ("Settings", "settings"),
         ("Exit", "exit")
     ]
     
@@ -547,12 +602,157 @@ def show_menu(stdscr):
             selected_mode = menu_items[current_selection][1]
             if selected_mode == "exit":
                 exit()
+            elif selected_mode == "settings":
+                show_settings(stdscr)
+                continue
             return selected_mode
         elif key == 27 or key == 3:  # ESC or Ctrl+C
             exit()
 
+def show_settings(stdscr):
+    curses.curs_set(0)
+    stdscr.clear()
+    max_y, max_x = stdscr.getmaxyx()
+    
+    setting_options = [
+        ("Forgive Errors", "forgive_errors", ["Off", "On"]),
+        ("Default Time Limit", "default_time_limit", [30, 60, 90, 120, 300]),
+        ("Default Words Limit", "default_words_limit", [5, 10, 25, 50, 100]),
+        ("Show Live WPM", "show_wpm_live", ["Off", "On"]),
+        ("Auto Save Results", "auto_save_results", ["Off", "On"]),
+        ("Min Accuracy to Save", "min_accuracy_to_save", [0.3, 0.5, 0.7, 0.8]),
+        ("Reset All Data", "reset_data", ["Cancel", "Confirm"]),
+        ("Back to Menu", "back", [])
+    ]
+    
+    current_selection = 0
+    
+    def get_current_value_index(setting_key, possible_values):
+        if setting_key == "forgive_errors" or setting_key == "show_wpm_live" or setting_key == "auto_save_results":
+            return 1 if settings[setting_key] else 0
+        elif setting_key in settings:
+            try:
+                return possible_values.index(settings[setting_key])
+            except ValueError:
+                return 0
+        return 0
+    
+    while True:
+        stdscr.clear()
+        center_y = max_y // 2
+        center_x = max_x // 2
+        
+        title = "Settings"
+        title_x = center_x - len(title) // 2
+        try:
+            stdscr.addstr(center_y - len(setting_options) // 2 - 2, title_x, title, curses.A_BOLD)
+        except curses.error:
+            pass
+        
+        for i, (display_name, setting_key, possible_values) in enumerate(setting_options):
+            y_pos = center_y - len(setting_options) // 2 + i
+            
+            if setting_key == "back":
+                display_text = display_name
+            elif setting_key == "reset_data":
+                display_text = display_name
+            elif len(possible_values) > 0:
+                current_idx = get_current_value_index(setting_key, possible_values)
+                current_value = possible_values[current_idx]
+                if setting_key == "min_accuracy_to_save":
+                    display_text = f"{display_name}: {int(current_value * 100)}%"
+                else:
+                    display_text = f"{display_name}: {current_value}"
+            else:
+                display_text = display_name
+            
+            x_pos = center_x - len(display_text) // 2
+            
+            try:
+                if i == current_selection:
+                    if setting_key != "back" and setting_key != "reset_data" and len(possible_values) > 1:
+                        stdscr.addstr(y_pos, max(0, x_pos - 4), "< ", curses.A_BOLD)
+                        stdscr.addstr(y_pos, min(max_x - 3, x_pos + len(display_text) + 1), " >", curses.A_BOLD)
+                    
+                    stdscr.addstr(y_pos, x_pos, display_text, curses.A_BOLD | curses.A_REVERSE)
+                else:
+                    stdscr.addstr(y_pos, x_pos, display_text)
+            except curses.error:
+                pass
+        
+        instructions = "↑/↓: Navigate | ←/→: Change value | Enter: Select | ESC: Back"
+        instr_x = center_x - len(instructions) // 2
+        try:
+            stdscr.addstr(center_y + len(setting_options) // 2 + 2, instr_x, instructions, curses.color_pair(4))
+        except curses.error:
+            pass
+        
+        stdscr.refresh()
+        
+        key = stdscr.getch()
+        
+        if key == curses.KEY_UP:
+            current_selection = (current_selection - 1) % len(setting_options)
+        elif key == curses.KEY_DOWN:
+            current_selection = (current_selection + 1) % len(setting_options)
+        elif key == curses.KEY_LEFT or key == curses.KEY_RIGHT:
+            _, setting_key, possible_values = setting_options[current_selection]
+            if len(possible_values) > 1 and setting_key in settings:
+                current_idx = get_current_value_index(setting_key, possible_values)
+                if key == curses.KEY_RIGHT:
+                    new_idx = (current_idx + 1) % len(possible_values)
+                else:
+                    new_idx = (current_idx - 1) % len(possible_values)
+                
+                new_value = possible_values[new_idx]
+                if setting_key in ["forgive_errors", "show_wpm_live", "auto_save_results"]:
+                    settings[setting_key] = new_value == "On"
+                else:
+                    settings[setting_key] = new_value
+                
+                save_settings()
+        elif key == 10 or key == 13:  # Enter
+            _, setting_key, _ = setting_options[current_selection]
+            if setting_key == "back":
+                return
+            elif setting_key == "reset_data":
+                stdscr.clear()
+                confirm_text = "Are you sure you want to reset all data? (y/N)"
+                confirm_x = center_x - len(confirm_text) // 2
+                try:
+                    stdscr.addstr(center_y, confirm_x, confirm_text)
+                    stdscr.refresh()
+                    
+                    confirm_key = stdscr.getch()
+                    if confirm_key == ord('y') or confirm_key == ord('Y'):
+                        if reset_all_data():
+                            stdscr.clear()
+                            success_text = "All data has been reset!"
+                            success_x = center_x - len(success_text) // 2
+                            stdscr.addstr(center_y, success_x, success_text, curses.color_pair(2))
+                            stdscr.addstr(center_y + 1, center_x - 10, "Press any key to continue")
+                            stdscr.refresh()
+                            stdscr.getch()
+                        else:
+                            error_text = "Failed to reset data!"
+                            error_x = center_x - len(error_text) // 2
+                            stdscr.addstr(center_y, error_x, error_text, curses.color_pair(3))
+                            stdscr.addstr(center_y + 1, center_x - 10, "Press any key to continue")
+                            stdscr.refresh()
+                            stdscr.getch()
+                except curses.error:
+                    pass
+        elif key == 27 or key == 3:  # ESC or Ctrl+C
+            return
+
 def main():
+    load_settings()
     load_user_data()
+    
+    global forgive_errors, time_limit, words_limit
+    forgive_errors = settings["forgive_errors"]
+    time_limit = settings["default_time_limit"]
+    words_limit = settings["default_words_limit"]
     
     try:
         stdscr = curses.initscr()
@@ -615,11 +815,16 @@ if __name__ == "__main__":
                 else:
                     curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLACK)
             
+            load_settings()
             selected_mode = show_menu(stdscr)
             test_type = selected_mode
             
+            forgive_errors = settings["forgive_errors"]
+            time_limit = settings["default_time_limit"]
+            words_limit = settings["default_words_limit"]
+            
             if test_type == "time":
-                time_limit = 60
+                time_limit = settings["default_time_limit"]
             
             curses.endwin()
             
@@ -631,13 +836,24 @@ if __name__ == "__main__":
             print(f"Menu Error: {e}")
             exit()
     else:
+        load_settings()
+        
         if "--forgive-errors" in sys.argv:
             forgive_errors = True
+        else:
+            forgive_errors = settings["forgive_errors"]
+
         if "--time" in sys.argv:
             test_type = "time"
             time_limit = int(sys.argv[sys.argv.index("--time") + 1])
+        else:
+            time_limit = settings["default_time_limit"]
+            
         if "--words" in sys.argv and test_type == "words":
             words_limit = int(sys.argv[sys.argv.index("--words") + 1])
+        else:
+            words_limit = settings["default_words_limit"]
+            
         if "--forever" in sys.argv:
             test_type = "forever"
     

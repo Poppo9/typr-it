@@ -1,0 +1,8 @@
+{
+  "forgive_errors": false,
+  "default_time_limit": 30,
+  "default_words_limit": 25,
+  "show_wpm_live": true,
+  "auto_save_results": true,
+  "min_accuracy_to_save": 0.5
+}
