@@ -447,10 +447,12 @@ def typing_test(stdscr):
                     
                     letter_correct[expected_char] += 1
                     n_letter_correct[expected_char] += 1
-                    letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+                    if letter_shown[expected_char] > 0:
+                        letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
                     n_letter_accuracy[expected_char] = n_letter_correct[expected_char] / n_letter_shown[expected_char]
                 else:
-                    letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
+                    if letter_shown[expected_char] > 0:
+                        letter_accuracy[expected_char] = letter_correct[expected_char] / letter_shown[expected_char]
                     n_letter_accuracy[expected_char] = n_letter_correct[expected_char] / n_letter_shown[expected_char]
             
             last_keystroke_time = current_time
@@ -471,7 +473,8 @@ def typing_test(stdscr):
         if letter_accuracy[letter] > 0:
             accuracy += letter_accuracy[letter]
             letter_count += 1
-    accuracy = accuracy / letter_count
+    if letter_count > 0:
+        accuracy = accuracy / letter_count
 
     new_accuracy = 0.0
     letter_count = 0
@@ -479,7 +482,10 @@ def typing_test(stdscr):
         if n_letter_accuracy[letter] > 0:
             new_accuracy += n_letter_accuracy[letter]
             letter_count += 1
-    new_accuracy = new_accuracy / letter_count
+    if letter_count > 0:
+        new_accuracy = new_accuracy / letter_count
+    else:
+        new_accuracy = 0.0
 
     raw_wpm = (len(words_to_type) / time_taken) * 10 if time_taken > 0 else 0
     wpm = raw_wpm * new_accuracy

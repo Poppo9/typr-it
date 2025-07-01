@@ -58,7 +58,8 @@ python3 main.py --forever
 ```
 
 ## Roadmap
-- [ ] Add things to the roadmap.
+- [ ] Add a setting for the wordlist.
+- [ ] Add a setting for the language.
 
 
 ## Contributing
