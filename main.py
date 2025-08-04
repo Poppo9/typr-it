@@ -74,7 +74,7 @@ letter_frequency = {
 }
 
 settings = {
-    "forgive_errors": False,
+    "forgive_errors": True,
     "default_time_limit": 60,
     "default_words_limit": 10,
     "show_wpm_live": True,
@@ -245,7 +245,8 @@ def typing_test(stdscr):
     target_words = words_limit if test_type == "words" else 50
 
     for _ in range(target_words):
-        word = random.choices(possible_words, weights=word_weight.values(), k=1)[0]
+        weights = [word_weight.get(word, 1) for word in possible_words]
+        word = random.choices(possible_words, weights=weights, k=1)[0]
         words_to_type += (" " if words_to_type else "") + word
         word_count += 1
         if test_type == "words" and word_count >= target_words:
@@ -373,7 +374,8 @@ def typing_test(stdscr):
 
         if (test_type in ["time", "forever"]) and current_pos >= len(words_to_type) - 50:
             for _ in range(20):
-                word = random.choices(possible_words, weights=word_weight.values(), k=1)[0]
+                weights = [word_weight.get(word, 1) for word in possible_words]
+                word = random.choices(possible_words, weights=weights, k=1)[0]
                 words_to_type += " " + word
 
         if test_type == "words" and current_pos >= len(words_to_type):
